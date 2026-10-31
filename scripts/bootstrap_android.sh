@@ -49,23 +49,83 @@ for gradle in (Path('android/app/build.gradle'), Path('android/app/build.gradle.
             )
         gradle.write_text(source)
 
-marker = '// QR_SENDER_COMPILE_SDK_OVERRIDE_V2'
+marker = '// QR_SENDER_COMPILE_SDK_OVERRIDE_V3'
 
+# Groovy DSL (android/build.gradle)
 root_gradle = Path('android/build.gradle')
 if root_gradle.exists():
     source = root_gradle.read_text()
-    # Replace any earlier override block, which ran too early in plugin configuration.
+    # Replace any earlier override block.
     if '// QR_SENDER_COMPILE_SDK_OVERRIDE' in source:
         source = source.split('// QR_SENDER_COMPILE_SDK_OVERRIDE', 1)[0].rstrip()
-    source += '''\n\n// QR_SENDER_COMPILE_SDK_OVERRIDE_V2\n// Set the SDK after each Android plugin has finished configuring its module.\nsubprojects { subproject ->\n    subproject.afterEvaluate {\n        def androidExtension = subproject.extensions.findByName("android")\n        if (androidExtension != null) {\n            def setter = androidExtension.class.methods.find {\n                it.name == "compileSdkVersion" && it.parameterCount == 1\n            }\n            if (setter != null) {\n                setter.invoke(androidExtension, 36)\n            } else {\n                androidExtension.compileSdk = 36\n            }\n        }\n    }\n}\n'''
+    source += '''
+
+// QR_SENDER_COMPILE_SDK_OVERRIDE_V3
+// Set the SDK after each Android plugin has finished configuring its module.
+subprojects { subproject ->
+    def applyCompileSdk = {
+        def androidExtension = subproject.extensions.findByName("android")
+        if (androidExtension != null) {
+            def setter = androidExtension.class.methods.find {
+                it.name == "compileSdkVersion" && it.parameterCount == 1 && it.parameterTypes[0] == int
+            }
+            if (setter != null) {
+                setter.invoke(androidExtension, 36)
+            } else {
+                androidExtension.compileSdk = 36
+            }
+        }
+    }
+    if (subproject.state.executed) {
+        try { applyCompileSdk() } catch (Exception ignored) { }
+    } else {
+        subproject.afterEvaluate { applyCompileSdk() }
+    }
+}
+'''
     root_gradle.write_text(source)
 
+# Kotlin DSL (android/build.gradle.kts) -- must be valid Kotlin, not Groovy.
 root_gradle_kts = Path('android/build.gradle.kts')
 if root_gradle_kts.exists():
     source = root_gradle_kts.read_text()
     if '// QR_SENDER_COMPILE_SDK_OVERRIDE' in source:
         source = source.split('// QR_SENDER_COMPILE_SDK_OVERRIDE', 1)[0].rstrip()
-    source += '''\n\n// QR_SENDER_COMPILE_SDK_OVERRIDE_V2\n// Set the SDK after each Android plugin has finished configuring its module.\nsubprojects { subproject ->\n    subproject.afterEvaluate {\n        val androidExtension = subproject.extensions.findByName("android")\n        val setter = androidExtension?.javaClass?.methods?.firstOrNull {\n            it.name == "compileSdkVersion" && it.parameterCount == 1\n        }\n        if (setter != null) {\n            setter.invoke(androidExtension, 36)\n        } else if (androidExtension != null) {\n            androidExtension.javaClass.methods.firstOrNull { it.name == "setCompileSdk" }\n                ?.invoke(androidExtension, 36)\n        }\n    }\n}\n'''
+    source += '''
+
+// QR_SENDER_COMPILE_SDK_OVERRIDE_V3
+// Set the SDK after each Android plugin has finished configuring its module.
+subprojects {
+    val applyCompileSdk: Project.() -> Unit = {
+        val androidExtension = extensions.findByName("android")
+        if (androidExtension != null) {
+            val methods = androidExtension.javaClass.methods
+            val legacySetter = methods.firstOrNull {
+                it.name == "compileSdkVersion" &&
+                    it.parameterCount == 1 &&
+                    it.parameterTypes[0] == Int::class.javaPrimitiveType
+            }
+            val modernSetter = methods.firstOrNull {
+                it.name == "setCompileSdk" && it.parameterCount == 1
+            }
+            if (legacySetter != null) {
+                legacySetter.invoke(androidExtension, 36)
+            } else if (modernSetter != null) {
+                modernSetter.invoke(androidExtension, 36)
+            }
+        }
+    }
+    if (state.executed) {
+        try {
+            applyCompileSdk()
+        } catch (_: Exception) {
+            // Module already finalized; its compileSdk was set elsewhere.
+        }
+    } else {
+        afterEvaluate { applyCompileSdk() }
+    }
+}
+'''
     root_gradle_kts.write_text(source)
 PY
 
