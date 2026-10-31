@@ -1,0 +1,9 @@
+{
+  "name": "QR Sender",
+  "short_name": "QR Sender",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F5F7F3",
+  "theme_color": "#2D7554",
+  "description": "A local cross-device connection utility"
+}

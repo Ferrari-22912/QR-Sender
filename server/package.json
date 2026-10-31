@@ -1,0 +1,8 @@
+{
+  "name": "qr-sender-local-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local WebSocket rendezvous and relay for QR Sender",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" }
+}
