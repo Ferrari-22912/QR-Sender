@@ -1,0 +1,50 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Create Android runner and grant required permissions
+        run: bash scripts/bootstrap_android.sh
+
+      - name: Analyze Flutter code
+        run: flutter analyze
+        continue-on-error: true
+
+      - name: Build web app
+        run: flutter build web --release
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: qr-sender-web
+          path: build/web/
+          retention-days: 14
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: qr-sender-android-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
