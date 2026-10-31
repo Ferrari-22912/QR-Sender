@@ -49,21 +49,24 @@ for gradle in (Path('android/app/build.gradle'), Path('android/app/build.gradle.
             )
         gradle.write_text(source)
 
+marker = '// QR_SENDER_COMPILE_SDK_OVERRIDE_V2'
+
 root_gradle = Path('android/build.gradle')
 if root_gradle.exists():
     source = root_gradle.read_text()
-    marker = '// QR_SENDER_COMPILE_SDK_OVERRIDE'
-    if marker not in source:
-        source += '''\n\n// QR_SENDER_COMPILE_SDK_OVERRIDE\n// Some Flutter plugins declare a newer Android API requirement than Flutter's default.\nsubprojects { subproject ->\n    subproject.plugins.withId("com.android.library") {\n        subproject.android.compileSdkVersion(36)\n    }\n    subproject.plugins.withId("com.android.application") {\n        subproject.android.compileSdkVersion(36)\n    }\n}\n'''
-        root_gradle.write_text(source)
+    # Replace any earlier override block, which ran too early in plugin configuration.
+    if '// QR_SENDER_COMPILE_SDK_OVERRIDE' in source:
+        source = source.split('// QR_SENDER_COMPILE_SDK_OVERRIDE', 1)[0].rstrip()
+    source += '''\n\n// QR_SENDER_COMPILE_SDK_OVERRIDE_V2\n// Set the SDK after each Android plugin has finished configuring its module.\nsubprojects { subproject ->\n    subproject.afterEvaluate {\n        def androidExtension = subproject.extensions.findByName("android")\n        if (androidExtension != null) {\n            def setter = androidExtension.class.methods.find {\n                it.name == "compileSdkVersion" && it.parameterCount == 1\n            }\n            if (setter != null) {\n                setter.invoke(androidExtension, 36)\n            } else {\n                androidExtension.compileSdk = 36\n            }\n        }\n    }\n}\n'''
+    root_gradle.write_text(source)
 
 root_gradle_kts = Path('android/build.gradle.kts')
 if root_gradle_kts.exists():
     source = root_gradle_kts.read_text()
-    marker = '// QR_SENDER_COMPILE_SDK_OVERRIDE'
-    if marker not in source:
-        source += '''\n\n// QR_SENDER_COMPILE_SDK_OVERRIDE\n// Apply the API level to Android library plugins as well as the app.\nsubprojects {\n    plugins.withId("com.android.library") {\n        extensions.configure<com.android.build.api.dsl.LibraryExtension> {\n            compileSdk = 36\n        }\n    }\n    plugins.withId("com.android.application") {\n        extensions.configure<com.android.build.api.dsl.ApplicationExtension> {\n            compileSdk = 36\n        }\n    }\n}\n'''
-        root_gradle_kts.write_text(source)
+    if '// QR_SENDER_COMPILE_SDK_OVERRIDE' in source:
+        source = source.split('// QR_SENDER_COMPILE_SDK_OVERRIDE', 1)[0].rstrip()
+    source += '''\n\n// QR_SENDER_COMPILE_SDK_OVERRIDE_V2\n// Set the SDK after each Android plugin has finished configuring its module.\nsubprojects { subproject ->\n    subproject.afterEvaluate {\n        val androidExtension = subproject.extensions.findByName("android")\n        val setter = androidExtension?.javaClass?.methods?.firstOrNull {\n            it.name == "compileSdkVersion" && it.parameterCount == 1\n        }\n        if (setter != null) {\n            setter.invoke(androidExtension, 36)\n        } else if (androidExtension != null) {\n            androidExtension.javaClass.methods.firstOrNull { it.name == "setCompileSdk" }\n                ?.invoke(androidExtension, 36)\n        }\n    }\n}\n'''
+    root_gradle_kts.write_text(source)
 PY
 
 echo "Android runner is ready (compileSdk 36). Check connected devices with: flutter devices"
